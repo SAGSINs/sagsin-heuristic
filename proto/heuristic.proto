@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package heuristic;
+
+message NodeMetric {
+  double cpu_load = 1;
+  double jitter_ms = 2;
+  int32 queue_len = 3;
+  double throughput_mbps = 4;
+}
+
+message Node {
+  string id = 1;
+  string type = 2;
+  string status = 3;
+  NodeMetric metrics = 4;
+}
+
+message LinkMetric {
+  double delay_ms = 1;
+  double jitter_ms = 2;
+  double loss_rate = 3;
+  double bandwidth_mbps = 4;
+}
+
+message Link {
+  string src = 1;
+  string dst = 2;
+  bool available = 3;
+  LinkMetric metrics = 4;
+}
+
+message GraphSnapshot {
+  string timestamp = 1;
+  repeated Node nodes = 2;
+  repeated Link links = 3;
+}
+
+message UpdateResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+service HeuristicService {
+  rpc UpdateGraph (GraphSnapshot) returns (UpdateResponse);
+}
