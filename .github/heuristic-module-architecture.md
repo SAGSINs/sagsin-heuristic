@@ -37,7 +37,6 @@
 | **gRPC Framework:**         | `grpc.aio` (async-native) | hiệu năng cao, tương thích backend NestJS gRPC client       |
 | **Graph Engine:**           | NetworkX + NumPy          | NetworkX cho route logic, NumPy cho lưu ma trận & stability |
 | **Heuristic/Optimization:** | PyGAD hoặc custom A*, SA  | linh hoạt                                                   |
-| **Logging:**                | loguru                    | log pipeline gọn, dễ đọc                                    |
 
 ---
 
@@ -55,8 +54,6 @@ heuristic-module/
 │   │   ├── graph_manager.py     # Quản lý graph NetworkX + NumPy
 │   │   ├── heuristic_engine.py  # A*, GA, SA,...
 │   │   └── stability.py         # Tính stabilityScore
-│   └── utils/
-│       └── logger.py            # loguru config
 │
 ├── requirements.txt
 └── Dockerfile
