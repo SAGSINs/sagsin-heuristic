@@ -1,10 +1,12 @@
-from typing import Any
+from typing import Any, Optional, Dict, Any as AnyType
 import datetime
 
 from proto import heuristic_pb2_grpc, heuristic_pb2
 from ..core import GraphManager
 from .heuristic_engine import HeuristicEngine
 from ..analysis import StabilityAnalyzer
+import os
+import socketio
 
 
 class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
@@ -12,8 +14,56 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
         self.graph_manager = GraphManager()
         self.heuristic_engine = HeuristicEngine(self.graph_manager)
         self.stability_analyzer = StabilityAnalyzer()
+        self.sio: Optional[Any] = None
         
         print("[HEURISTIC] Service initialized")
+        self._init_socket()
+
+    def _init_socket(self):
+        if socketio is None:
+            print("[HEURISTIC] socketio not available; step streaming disabled")
+            return
+        try:
+            backend_url = os.environ.get('BACKEND_SOCKET_URL', 'http://localhost:3000')
+            self.sio = socketio.Client()
+
+            @self.sio.event
+            def connect():
+                print("[HEURISTIC] Connected to backend socket")
+
+            @self.sio.on('heuristic:request-run')
+            def on_request_run(data):
+                try:
+                    src = data.get('src')
+                    dst = data.get('dst')
+                    algo = data.get('algo', 'astar')
+                    print(f"[HEURISTIC] Socket request-run {algo}: {src}->{dst}")
+                    def on_step(ev: Dict[str, AnyType]):
+                        if self.sio:
+                            self.sio.emit('heuristic:step', ev)
+                    if self.sio:
+                        self.sio.emit('heuristic:run-start', {'algo': algo, 'src': src, 'dst': dst})
+                    result = self.heuristic_engine.find_optimal_route(src, dst, algo, on_step=on_step)
+                    if self.sio:
+                        payload = {'algo': algo, 'src': src, 'dst': dst, 'result': None}
+                        if result:
+                            payload['result'] = {
+                                'path': result.path,
+                                'total_weight': result.total_weight,
+                                'total_delay_ms': result.total_delay,
+                                'total_jitter_ms': result.total_jitter,
+                                'avg_loss_rate': result.average_loss_rate,
+                                'min_bandwidth_mbps': result.min_bandwidth,
+                                'hop_count': result.hop_count,
+                                'stability_score': result.stability_score,
+                            }
+                        self.sio.emit('heuristic:complete', payload)
+                except Exception as e:
+                    print(f"[HEURISTIC] request-run error: {e}")
+
+            self.sio.connect(backend_url, transports=['websocket'])
+        except Exception as e:
+            print(f"[HEURISTIC] Socket init failed: {e}")
     
     async def UpdateGraph(self, request: heuristic_pb2.GraphSnapshot, context: Any) -> heuristic_pb2.UpdateResponse:
         try:

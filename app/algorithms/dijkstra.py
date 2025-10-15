@@ -11,7 +11,43 @@ class DijkstraAlgorithm(BaseAlgorithm):
             return None
             
         try:
-            path = nx.shortest_path(graph, src, dst, weight='weight')
+            # Manual Dijkstra to emit steps
+            import heapq
+            dist = {node: float('inf') for node in graph.nodes}
+            prev = {}
+            dist[src] = 0.0
+            pq = [(0.0, src)]
+            visited = set()
+            step = 0
+
+            while pq:
+                d, u = heapq.heappop(pq)
+                if u in visited:
+                    continue
+                visited.add(u)
+                self._emit_step({'algo': 'dijkstra', 'action': 'expand', 'step': step, 'node': u, 'dist': d})
+                step += 1
+                if u == dst:
+                    break
+                for v in graph.neighbors(u):
+                    w = graph[u][v].get('weight', 1.0)
+                    nd = d + w
+                    if nd < dist[v]:
+                        dist[v] = nd
+                        prev[v] = u
+                        heapq.heappush(pq, (nd, v))
+                        self._emit_step({'algo': 'dijkstra', 'action': 'relax', 'from': u, 'to': v, 'step': step, 'dist': nd})
+                        step += 1
+
+            if dst not in prev and src != dst:
+                return None
+            path = [dst]
+            cur = dst
+            while cur in prev:
+                cur = prev[cur]
+                path.append(cur)
+            path.reverse()
+            self._emit_step({'algo': 'dijkstra', 'action': 'complete', 'path': path})
             return self._calculate_route_metrics(path, graph)
             
         except (nx.NetworkXNoPath, nx.NodeNotFound):

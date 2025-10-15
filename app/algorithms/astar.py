@@ -11,15 +11,64 @@ class AStarAlgorithm(BaseAlgorithm):
             return None
             
         try:
-            path = nx.astar_path(
-                graph, 
-                src, 
-                dst, 
-                heuristic=lambda u, v: self._network_heuristic(u, v, graph),
-                weight='weight'
-            )
-            
-            return self._calculate_route_metrics(path, graph)
+            # Manual A* to emit steps
+            import heapq
+            open_set = []
+            heapq.heappush(open_set, (0, src))
+            came_from = {}
+            g_score = {node: float('inf') for node in graph.nodes}
+            g_score[src] = 0.0
+            f_score = {node: float('inf') for node in graph.nodes}
+            f_score[src] = self._network_heuristic(src, dst, graph)
+
+            visited = set()
+            step_index = 0
+
+            while open_set:
+                _, current = heapq.heappop(open_set)
+                if current in visited:
+                    continue
+                visited.add(current)
+
+                # Emit expansion step
+                self._emit_step({
+                    'algo': 'astar',
+                    'step': step_index,
+                    'action': 'expand',
+                    'node': current,
+                    'open_size': len(open_set),
+                    'g': g_score.get(current, float('inf')),
+                    'f': f_score.get(current, float('inf')),
+                })
+                step_index += 1
+
+                if current == dst:
+                    path = [current]
+                    while current in came_from:
+                        current = came_from[current]
+                        path.append(current)
+                    path.reverse()
+                    self._emit_step({'algo': 'astar', 'action': 'complete', 'path': path})
+                    return self._calculate_route_metrics(path, graph)
+
+                for neighbor in graph.neighbors(current):
+                    tentative_g = g_score[current] + graph[current][neighbor].get('weight', 1.0)
+                    if tentative_g < g_score[neighbor]:
+                        came_from[neighbor] = current
+                        g_score[neighbor] = tentative_g
+                        f_score[neighbor] = tentative_g + self._network_heuristic(neighbor, dst, graph)
+                        heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                        # Emit neighbor consideration
+                        self._emit_step({
+                            'algo': 'astar',
+                            'step': step_index,
+                            'action': 'consider',
+                            'from': current,
+                            'to': neighbor,
+                            'g': g_score[neighbor],
+                            'f': f_score[neighbor],
+                        })
+                        step_index += 1
             
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             return None

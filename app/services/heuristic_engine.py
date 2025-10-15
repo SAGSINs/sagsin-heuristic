@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Callable, Dict, Any
 from ..core import GraphManager
 from ..algorithms import RouteResult, AStarAlgorithm, DijkstraAlgorithm, GreedyAlgorithm
 import networkx as nx
@@ -12,7 +12,7 @@ class HeuristicEngine:
         self.dijkstra = DijkstraAlgorithm(graph_manager)
         self.greedy = GreedyAlgorithm(graph_manager)
     
-    def find_optimal_route(self, src: str, dst: str, algorithm: str = "astar") -> Optional[RouteResult]:
+    def find_optimal_route(self, src: str, dst: str, algorithm: str = "astar", on_step: Optional[Callable[[Dict[str, Any]], None]] = None) -> Optional[RouteResult]:
         algorithm_map = {
             "astar": self.astar,
             "dijkstra": self.dijkstra,
@@ -22,7 +22,11 @@ class HeuristicEngine:
         if algorithm not in algorithm_map:
             raise ValueError(f"Unknown algorithm: {algorithm}")
         
-        return algorithm_map[algorithm].find_route(src, dst)
+        # If algorithm supports step callbacks, bind it
+        alg = algorithm_map[algorithm]
+        if hasattr(alg, 'set_step_callback') and callable(getattr(alg, 'set_step_callback')):
+            alg.set_step_callback(on_step)
+        return alg.find_route(src, dst)
     
     def find_k_shortest_paths(self, src: str, dst: str, k: int = 3) -> List[RouteResult]:
         graph = self.graph_manager.get_graph_copy()

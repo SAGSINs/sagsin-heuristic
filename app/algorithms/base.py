@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Callable, Dict, Any
 from dataclasses import dataclass
 
 
@@ -17,6 +17,17 @@ class RouteResult:
 class BaseAlgorithm:
     def __init__(self, graph_manager):
         self.graph_manager = graph_manager
+        self._on_step: Optional[Callable[[Dict[str, Any]], None]] = None
+    
+    def set_step_callback(self, cb: Optional[Callable[[Dict[str, Any]], None]]):
+        self._on_step = cb
+    
+    def _emit_step(self, event: Dict[str, Any]):
+        if self._on_step:
+            try:
+                self._on_step(event)
+            except Exception:
+                pass
     
     def find_route(self, src: str, dst: str) -> Optional[RouteResult]:
         raise NotImplementedError("Subclasses must implement find_route method")

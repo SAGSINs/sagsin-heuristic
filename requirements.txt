@@ -4,3 +4,4 @@ psutil>=7.0.0
 networkx==3.3
 numpy
 loguru==0.7.2
+python-socketio[client]>=5.11.0

@@ -13,6 +13,7 @@ class GreedyAlgorithm(BaseAlgorithm):
         current = src
         path = [src]
         
+        step = 0
         while current != dst:
             if current in visited:
                 return None
@@ -33,12 +34,16 @@ class GreedyAlgorithm(BaseAlgorithm):
                 key=lambda n: self._simple_heuristic(n, dst, graph)
             )
             
+            # Emit selection step
+            self._emit_step({'algo': 'greedy', 'action': 'select', 'from': current, 'to': best_neighbor, 'step': step})
+            step += 1
             path.append(best_neighbor)
             current = best_neighbor
             
             if len(path) > len(graph.nodes()):
                 return None
         
+        self._emit_step({'algo': 'greedy', 'action': 'complete', 'path': path})
         return self._calculate_route_metrics(path, graph)
     
     def _simple_heuristic(self, u: str, v: str, graph) -> float:

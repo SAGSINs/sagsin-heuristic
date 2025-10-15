@@ -9,13 +9,6 @@ Complete implementation of the heuristic module for network route optimization a
 - **Stability Analyzer**: Real-time network stability scoring and metrics smoothing
 - **gRPC Service**: Async server handling UpdateGraph and RequestRoute RPCs
 
-## 📦 Dependencies
-
-Install all dependencies:
-
-```powershell
-pip install -r requirements.txt
-
 ## 🔧 Setup Instructions
 
 1. **Activate virtual environment:**
