@@ -25,19 +25,29 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
             return
         try:
             backend_url = os.environ.get('BACKEND_SOCKET_URL', 'http://localhost:3000')
+            print(f"[HEURISTIC] 🔌 Initializing socket to: {backend_url}")
             self.sio = socketio.Client()
 
             @self.sio.event
             def connect():
-                print("[HEURISTIC] Connected to backend socket")
+                print(f"[HEURISTIC] ✅ Connected to backend socket! ID: {self.sio.sid}")
+
+            @self.sio.event
+            def disconnect():
+                print("[HEURISTIC] ❌ Disconnected from backend socket")
+
+            @self.sio.event
+            def connect_error(data):
+                print(f"[HEURISTIC] 🚨 Connection error: {data}")
 
             @self.sio.on('heuristic:request-run')
             def on_request_run(data):
+                print(f"[HEURISTIC] 📥 Received heuristic:request-run event: {data}")
                 try:
                     src = data.get('src')
                     dst = data.get('dst')
                     algo = data.get('algo', 'astar')
-                    print(f"[HEURISTIC] Socket request-run {algo}: {src}->{dst}")
+                    print(f"[HEURISTIC] 🚀 Running {algo}: {src} → {dst}")
                     def on_step(ev: Dict[str, AnyType]):
                         if self.sio:
                             self.sio.emit('heuristic:step', ev)
@@ -58,12 +68,19 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
                                 'stability_score': result.stability_score,
                             }
                         self.sio.emit('heuristic:complete', payload)
+                        print(f"[HEURISTIC] ✅ Emitted heuristic:complete")
                 except Exception as e:
-                    print(f"[HEURISTIC] request-run error: {e}")
+                    print(f"[HEURISTIC] ❌ Error in request-run: {e}")
+                    import traceback
+                    traceback.print_exc()
 
+            print(f"[HEURISTIC] 🔗 Connecting to {backend_url}...")
             self.sio.connect(backend_url, transports=['websocket'])
+            print(f"[HEURISTIC] ✅ Socket connected: {self.sio.connected}")
         except Exception as e:
-            print(f"[HEURISTIC] Socket init failed: {e}")
+            print(f"[HEURISTIC] 🚨 Socket init failed: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def UpdateGraph(self, request: heuristic_pb2.GraphSnapshot, context: Any) -> heuristic_pb2.UpdateResponse:
         try:
