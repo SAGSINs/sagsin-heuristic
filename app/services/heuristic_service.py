@@ -25,24 +25,10 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
             return
         try:
             backend_url = os.environ.get('BACKEND_SOCKET_URL', 'http://localhost:3000')
-            print(f"[HEURISTIC] 🔌 Initializing socket to: {backend_url}")
             self.sio = socketio.Client()
-
-            @self.sio.event
-            def connect():
-                print(f"[HEURISTIC] ✅ Connected to backend socket! ID: {self.sio.sid}")
-
-            @self.sio.event
-            def disconnect():
-                print("[HEURISTIC] ❌ Disconnected from backend socket")
-
-            @self.sio.event
-            def connect_error(data):
-                print(f"[HEURISTIC] 🚨 Connection error: {data}")
 
             @self.sio.on('heuristic:request-run')
             def on_request_run(data):
-                print(f"[HEURISTIC] 📥 Received heuristic:request-run event: {data}")
                 try:
                     src = data.get('src')
                     dst = data.get('dst')
@@ -74,7 +60,6 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
                     import traceback
                     traceback.print_exc()
 
-            print(f"[HEURISTIC] 🔗 Connecting to {backend_url}...")
             self.sio.connect(backend_url, transports=['websocket'])
             print(f"[HEURISTIC] ✅ Socket connected: {self.sio.connected}")
         except Exception as e:
@@ -84,8 +69,6 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
     
     async def UpdateGraph(self, request: heuristic_pb2.GraphSnapshot, context: Any) -> heuristic_pb2.UpdateResponse:
         try:
-            print(f"[HEURISTIC] UpdateGraph: {len(request.nodes)} nodes, {len(request.links)} links")
-
             ts = request.timestamp or datetime.datetime.utcnow().isoformat()
             timestamp = datetime.datetime.fromisoformat(ts.replace('Z', '+00:00'))
             
@@ -116,8 +99,6 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
             src = request.source_node_id
             dst = request.destination_node_id
             algorithm = getattr(request, 'algorithm', 'astar')
-            
-            print(f"[HEURISTIC] RouteRequest: {src} -> {dst} using {algorithm}")
             
             route_result = self.heuristic_engine.find_optimal_route(src, dst, algorithm)
             
