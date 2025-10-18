@@ -7,19 +7,23 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import grpc
-from proto import heuristic_pb2_grpc
+from proto import heuristic_pb2_grpc, algorithm_stream_pb2_grpc
 from app.services.heuristic_service import HeuristicServiceServicer
 
 
 async def serve() -> None:
     server = grpc.aio.server()
-    heuristic_pb2_grpc.add_HeuristicServiceServicer_to_server(
-        HeuristicServiceServicer(), server
-    )
+    servicer = HeuristicServiceServicer()
+    
+    # Register both services
+    heuristic_pb2_grpc.add_HeuristicServiceServicer_to_server(servicer, server)
+    algorithm_stream_pb2_grpc.add_AlgorithmStreamServiceServicer_to_server(servicer, server)
 
     listen_addr = os.environ.get("HEURISTIC_LISTEN", "0.0.0.0:50052")
     server.add_insecure_port(listen_addr)
     print(f"Starting Heuristic gRPC server on {listen_addr}")
+    print("  - HeuristicService (graph updates)")
+    print("  - AlgorithmStreamService (algorithm execution streaming)")
     await server.start()
     await server.wait_for_termination()
 

@@ -1,71 +1,103 @@
-from typing import Any, Optional, Dict, Any as AnyType
+from typing import Any, Optional, Dict, Any as AnyType, Iterator
 import datetime
+import grpc
 
 from proto import heuristic_pb2_grpc, heuristic_pb2
+from proto import algorithm_stream_pb2_grpc, algorithm_stream_pb2
 from ..core import GraphManager
 from .heuristic_engine import HeuristicEngine
 from ..analysis import StabilityAnalyzer
-import os
-import socketio
 
 
-class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer):
+class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer, algorithm_stream_pb2_grpc.AlgorithmStreamServiceServicer):
     def __init__(self):
         self.graph_manager = GraphManager()
         self.heuristic_engine = HeuristicEngine(self.graph_manager)
         self.stability_analyzer = StabilityAnalyzer()
-        self.sio: Optional[Any] = None
         
-        print("[HEURISTIC] Service initialized")
-        self._init_socket()
+        print("[HEURISTIC] Service initialized with gRPC streaming")
 
-    def _init_socket(self):
-        if socketio is None:
-            print("[HEURISTIC] socketio not available; step streaming disabled")
-            return
+    def RunAlgorithm(self, request: algorithm_stream_pb2.AlgorithmRunRequest, context: Any) -> Iterator[algorithm_stream_pb2.AlgorithmStreamEvent]:
+        """
+        gRPC server-side streaming for algorithm execution.
+        Backend calls this method, and we stream back events.
+        """
+        algo = request.algo
+        src = request.src
+        dst = request.dst
+        
+        print(f"[HEURISTIC] 📥 gRPC RunAlgorithm: {algo} from {src} to {dst}")
+        
         try:
-            backend_url = os.environ.get('BACKEND_SOCKET_URL', 'http://localhost:3000')
-            self.sio = socketio.Client()
-
-            @self.sio.on('heuristic:request-run')
-            def on_request_run(data):
-                try:
-                    src = data.get('src')
-                    dst = data.get('dst')
-                    algo = data.get('algo', 'astar')
-                    print(f"[HEURISTIC] 🚀 Running {algo}: {src} → {dst}")
-                    def on_step(ev: Dict[str, AnyType]):
-                        if self.sio:
-                            self.sio.emit('heuristic:step', ev)
-                    if self.sio:
-                        self.sio.emit('heuristic:run-start', {'algo': algo, 'src': src, 'dst': dst})
-                    result = self.heuristic_engine.find_optimal_route(src, dst, algo, on_step=on_step)
-                    if self.sio:
-                        payload = {'algo': algo, 'src': src, 'dst': dst, 'result': None}
-                        if result:
-                            payload['result'] = {
-                                'path': result.path,
-                                'total_weight': result.total_weight,
-                                'total_delay_ms': result.total_delay,
-                                'total_jitter_ms': result.total_jitter,
-                                'avg_loss_rate': result.average_loss_rate,
-                                'min_bandwidth_mbps': result.min_bandwidth,
-                                'hop_count': result.hop_count,
-                                'stability_score': result.stability_score,
-                            }
-                        self.sio.emit('heuristic:complete', payload)
-                        print(f"[HEURISTIC] ✅ Emitted heuristic:complete")
-                except Exception as e:
-                    print(f"[HEURISTIC] ❌ Error in request-run: {e}")
-                    import traceback
-                    traceback.print_exc()
-
-            self.sio.connect(backend_url, transports=['websocket'])
-            print(f"[HEURISTIC] ✅ Socket connected: {self.sio.connected}")
+            # Send run start event
+            yield algorithm_stream_pb2.AlgorithmStreamEvent(
+                run_start=algorithm_stream_pb2.AlgorithmRunStart(
+                    algo=algo,
+                    src=src,
+                    dst=dst
+                )
+            )
+            
+            # Store steps to yield later (can't yield from callback)
+            step_events = []
+            
+            # Callback to collect steps
+            def on_step(ev: Dict[str, AnyType]):
+                step_event = algorithm_stream_pb2.AlgorithmStep(
+                    algo=ev.get('algo', algo),
+                    step=ev.get('step', 0),
+                    action=ev.get('action', ''),
+                    node=ev.get('node', ''),
+                    from_node=ev.get('from', ''),
+                    to_node=ev.get('to', ''),
+                    open_size=ev.get('open_size', 0),
+                    g=ev.get('g', 0.0),
+                    f=ev.get('f', 0.0),
+                    dist=ev.get('dist', 0.0)
+                )
+                
+                # Add path if present
+                if 'path' in ev and ev['path']:
+                    step_event.path.extend(ev['path'])
+                
+                step_events.append(algorithm_stream_pb2.AlgorithmStreamEvent(step=step_event))
+            
+            # Run the algorithm
+            result = self.heuristic_engine.find_optimal_route(src, dst, algo, on_step=on_step)
+            
+            # Yield all collected step events
+            for step_event in step_events:
+                yield step_event
+            
+            # Send completion event
+            complete_event = algorithm_stream_pb2.AlgorithmComplete(
+                algo=algo,
+                src=src,
+                dst=dst
+            )
+            
+            if result:
+                route_result = algorithm_stream_pb2.RouteResult(
+                    path=result.path,
+                    total_weight=result.total_weight,
+                    total_delay_ms=result.total_delay,
+                    total_jitter_ms=result.total_jitter,
+                    avg_loss_rate=result.average_loss_rate,
+                    min_bandwidth_mbps=result.min_bandwidth,
+                    hop_count=result.hop_count,
+                    stability_score=result.stability_score
+                )
+                complete_event.result.CopyFrom(route_result)
+            
+            yield algorithm_stream_pb2.AlgorithmStreamEvent(complete=complete_event)
+            print(f"[HEURISTIC] ✅ Algorithm {algo} completed")
+            
         except Exception as e:
-            print(f"[HEURISTIC] 🚨 Socket init failed: {e}")
+            print(f"[HEURISTIC] ❌ Error in RunAlgorithm: {e}")
             import traceback
             traceback.print_exc()
+            # Optionally yield an error event or let gRPC handle it
+            context.abort(grpc.StatusCode.INTERNAL, f"Algorithm execution failed: {str(e)}")
     
     async def UpdateGraph(self, request: heuristic_pb2.GraphSnapshot, context: Any) -> heuristic_pb2.UpdateResponse:
         try:
