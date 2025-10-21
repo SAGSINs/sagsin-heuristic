@@ -14,22 +14,12 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer, algo
         self.graph_manager = GraphManager()
         self.heuristic_engine = HeuristicEngine(self.graph_manager)
         self.stability_analyzer = StabilityAnalyzer()
-        
-        print("[HEURISTIC] Service initialized with gRPC streaming")
-
     def RunAlgorithm(self, request: algorithm_stream_pb2.AlgorithmRunRequest, context: Any) -> Iterator[algorithm_stream_pb2.AlgorithmStreamEvent]:
-        """
-        gRPC server-side streaming for algorithm execution.
-        Backend calls this method, and we stream back events.
-        """
         algo = request.algo
         src = request.src
         dst = request.dst
-        
-        print(f"[HEURISTIC] 📥 gRPC RunAlgorithm: {algo} from {src} to {dst}")
-        
+
         try:
-            # Send run start event
             yield algorithm_stream_pb2.AlgorithmStreamEvent(
                 run_start=algorithm_stream_pb2.AlgorithmRunStart(
                     algo=algo,
@@ -37,11 +27,8 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer, algo
                     dst=dst
                 )
             )
-            
-            # Store steps to yield later (can't yield from callback)
             step_events = []
             
-            # Callback to collect steps
             def on_step(ev: Dict[str, AnyType]):
                 step_event = algorithm_stream_pb2.AlgorithmStep(
                     algo=ev.get('algo', algo),
@@ -56,20 +43,16 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer, algo
                     dist=ev.get('dist', 0.0)
                 )
                 
-                # Add path if present
                 if 'path' in ev and ev['path']:
                     step_event.path.extend(ev['path'])
                 
                 step_events.append(algorithm_stream_pb2.AlgorithmStreamEvent(step=step_event))
             
-            # Run the algorithm
             result = self.heuristic_engine.find_optimal_route(src, dst, algo, on_step=on_step)
             
-            # Yield all collected step events
             for step_event in step_events:
                 yield step_event
             
-            # Send completion event
             complete_event = algorithm_stream_pb2.AlgorithmComplete(
                 algo=algo,
                 src=src,
@@ -90,13 +73,11 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer, algo
                 complete_event.result.CopyFrom(route_result)
             
             yield algorithm_stream_pb2.AlgorithmStreamEvent(complete=complete_event)
-            print(f"[HEURISTIC] ✅ Algorithm {algo} completed")
             
         except Exception as e:
-            print(f"[HEURISTIC] ❌ Error in RunAlgorithm: {e}")
+            print(f"[HEURISTIC] Error in RunAlgorithm: {e}")
             import traceback
             traceback.print_exc()
-            # Optionally yield an error event or let gRPC handle it
             context.abort(grpc.StatusCode.INTERNAL, f"Algorithm execution failed: {str(e)}")
     
     async def UpdateGraph(self, request: heuristic_pb2.GraphSnapshot, context: Any) -> heuristic_pb2.UpdateResponse:

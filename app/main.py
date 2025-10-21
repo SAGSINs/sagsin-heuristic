@@ -21,9 +21,6 @@ async def serve() -> None:
 
     listen_addr = os.environ.get("HEURISTIC_LISTEN", "0.0.0.0:50052")
     server.add_insecure_port(listen_addr)
-    print(f"Starting Heuristic gRPC server on {listen_addr}")
-    print("  - HeuristicService (graph updates)")
-    print("  - AlgorithmStreamService (algorithm execution streaming)")
     await server.start()
     await server.wait_for_termination()
 
