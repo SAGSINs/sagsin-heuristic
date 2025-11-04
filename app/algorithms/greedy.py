@@ -31,7 +31,10 @@ class GreedyAlgorithm(BaseAlgorithm):
             
             best_neighbor = min(
                 neighbors,
-                key=lambda n: self._simple_heuristic(n, dst, graph)
+                key=lambda n: (
+                    0.6 * graph[current][n].get('weight', 100.0) +
+                    0.4 * self._simple_heuristic(n, dst, graph)
+                )
             )
             
             # Emit selection step
@@ -43,7 +46,12 @@ class GreedyAlgorithm(BaseAlgorithm):
             if len(path) > len(graph.nodes()):
                 return None
         
-        self._emit_step({'algo': 'greedy', 'action': 'complete', 'path': path})
+        self._emit_step({
+            'algo': 'greedy', 
+            'action': 'complete', 
+            'path': path,
+            'node': dst
+        })
         return self._calculate_route_metrics(path, graph)
     
     def _simple_heuristic(self, u: str, v: str, graph) -> float:
@@ -52,9 +60,9 @@ class GreedyAlgorithm(BaseAlgorithm):
         
         u_type = graph.nodes[u].get('type', 'unknown')
         v_type = graph.nodes[v].get('type', 'unknown')
-        
+
         if u_type == v_type:
-            return 10.0 
+            return 5.0
         
         priority = {
             'ground_station': 1,
@@ -67,4 +75,10 @@ class GreedyAlgorithm(BaseAlgorithm):
         u_priority = priority.get(u_type, 6)
         v_priority = priority.get(v_type, 6)
         
-        return abs(u_priority - v_priority) * 20.0
+        priority_score = abs(u_priority - v_priority) * 15.0
+
+        stability_penalty = 0.0
+        if u_type in ['mobile_device', 'drone']:
+            stability_penalty = 10.0
+        
+        return priority_score + stability_penalty

@@ -47,7 +47,14 @@ class DijkstraAlgorithm(BaseAlgorithm):
                 cur = prev[cur]
                 path.append(cur)
             path.reverse()
-            self._emit_step({'algo': 'dijkstra', 'action': 'complete', 'path': path})
+            
+            self._emit_step({
+                'algo': 'dijkstra', 
+                'action': 'complete', 
+                'path': path,
+                'node': dst,
+                'dist': dist.get(dst, 0.0)
+            })
             return self._calculate_route_metrics(path, graph)
             
         except (nx.NetworkXNoPath, nx.NodeNotFound):

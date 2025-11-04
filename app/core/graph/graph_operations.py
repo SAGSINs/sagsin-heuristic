@@ -63,10 +63,28 @@ class GraphOperations:
             )
             
             self.links_data[link_id] = link_data
+
+            bandwidth_mbps = link_pb.metrics.bandwidth_mbps or 0.0
+            bandwidth_penalty = 1000.0 / (bandwidth_mbps + 1.0)
+
+            node_penalty = 0.0
+            src_node = self.nodes_data.get(link_pb.src)
+            dst_node = self.nodes_data.get(link_pb.dst)
+            
+            if src_node:
+                node_penalty += src_node.cpu_load * 5.0
+                node_penalty += src_node.queue_len * 0.5
+            
+            if dst_node:
+                node_penalty += dst_node.cpu_load * 5.0
+                node_penalty += dst_node.queue_len * 0.5
+
             weight = (
                 link_pb.metrics.delay_ms +
-                link_pb.metrics.jitter_ms * 2 + 
-                link_pb.metrics.loss_rate * 1000 
+                link_pb.metrics.jitter_ms * 2.0 + 
+                link_pb.metrics.loss_rate * 1000.0 +
+                bandwidth_penalty * 0.1 + 
+                node_penalty
             )
             
             self.graph.add_edge(

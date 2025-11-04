@@ -44,11 +44,20 @@ class AStarAlgorithm(BaseAlgorithm):
 
                 if current == dst:
                     path = [current]
-                    while current in came_from:
-                        current = came_from[current]
-                        path.append(current)
+                    temp_node = current
+                    while temp_node in came_from:
+                        temp_node = came_from[temp_node]
+                        path.append(temp_node)
                     path.reverse()
-                    self._emit_step({'algo': 'astar', 'action': 'complete', 'path': path})
+                    
+                    self._emit_step({
+                        'algo': 'astar', 
+                        'action': 'complete', 
+                        'path': path,
+                        'node': dst,
+                        'g': g_score.get(dst, 0.0),
+                        'f': f_score.get(dst, 0.0)
+                    })
                     return self._calculate_route_metrics(path, graph)
 
                 for neighbor in graph.neighbors(current):
@@ -74,36 +83,31 @@ class AStarAlgorithm(BaseAlgorithm):
             return None
     
     def _network_heuristic(self, u: str, v: str, graph: nx.Graph) -> float:
-        """Network-aware heuristic for A* algorithm"""
         if u == v:
             return 0.0
         
-        u_type = graph.nodes[u].get('type', 'unknown')
-        v_type = graph.nodes[v].get('type', 'unknown')
+        neighbors = list(graph.neighbors(u))
+        if not neighbors:
+            return 0.0  
         
-        type_delays = {
-            ('satellite', 'satellite'): 20, 
-            ('satellite', 'ground_station'): 250, 
-            ('satellite', 'ship'): 260,     
-            ('satellite', 'mobile_device'): 270,
-            ('satellite', 'drone'): 240, 
-            
-            ('ground_station', 'ground_station'): 10,
-            ('ground_station', 'mobile_device'): 15, 
-            ('ground_station', 'ship'): 30,        
-            ('ground_station', 'drone'): 25,        
-            
-            ('ship', 'ship'): 50,             
-            ('ship', 'mobile_device'): 40,    
-            ('ship', 'drone'): 35,           
-            
-            ('mobile_device', 'mobile_device'): 20,
-            ('mobile_device', 'drone'): 30,    
-            
-            ('drone', 'drone'): 25,        
-        }
+        min_outgoing_weight = min(
+            graph[u][n].get('weight', 100.0) 
+            for n in neighbors
+        )
+
+        try:
+            min_hops = nx.shortest_path_length(graph, u, v)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            u_type = graph.nodes[u].get('type', 'unknown')
+            v_type = graph.nodes[v].get('type', 'unknown')
+
+            if u_type == v_type:
+                min_hops = 1
+            elif u_type == 'ground_station' or v_type == 'ground_station':
+                min_hops = 2
+            else:
+                min_hops = 3
+
+        heuristic_value = float(min_outgoing_weight * max(1, min_hops))
         
-        delay_key = (u_type, v_type) if (u_type, v_type) in type_delays else (v_type, u_type)
-        base_delay = type_delays.get(delay_key, 100)  
-        
-        return float(base_delay + abs(hash(u + v)) % 10)
+        return heuristic_value
