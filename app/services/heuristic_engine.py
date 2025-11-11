@@ -19,9 +19,6 @@ class HeuristicEngine:
             "greedy": self.greedy
         }
         
-        if algorithm not in algorithm_map:
-            raise ValueError(f"Unknown algorithm: {algorithm}")
-        
         # If algorithm supports step callbacks, bind it
         alg = algorithm_map[algorithm]
         if hasattr(alg, 'set_step_callback') and callable(getattr(alg, 'set_step_callback')):

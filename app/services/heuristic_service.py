@@ -1,4 +1,4 @@
-from typing import Any, Optional, Dict, Any as AnyType, Iterator
+from typing import Any, Dict, Any as AnyType, Iterator
 import datetime
 import grpc
 
@@ -85,27 +85,15 @@ class HeuristicServiceServicer(heuristic_pb2_grpc.HeuristicServiceServicer, algo
             ts = request.timestamp or datetime.datetime.utcnow().isoformat()
             timestamp = datetime.datetime.fromisoformat(ts.replace('Z', '+00:00'))
             
-            success = self.graph_manager.update_graph(request)
-            
-            if not success:
-                return heuristic_pb2.UpdateResponse(
-                    success=False,
-                    message="Failed to update graph"
-                )
+            self.graph_manager.update_graph(request)
             
             await self._update_stability_metrics(request, timestamp)
-            
-            return heuristic_pb2.UpdateResponse(
-                success=True,
-                message=f"Graph updated successfully with {len(request.nodes)} nodes and {len(request.links)} links"
-            )
-            
+            self.graph_manager.update_graph(request)
+
+            await self._update_stability_metrics(request, timestamp)
+
         except Exception as e:
             print(f"[HEURISTIC] ERROR: {e}")
-            return heuristic_pb2.UpdateResponse(
-                success=False,
-                message=f"Error: {str(e)}"
-            )
     
     async def RequestRoute(self, request, context):
         try:
